@@ -1,0 +1,130 @@
+
+#define F_CPU 1000000
+#include <avr/io.h>
+#include <util/delay.h>
+#include "lcd.h"
+#include "USART.h"
+
+static inline void initADC0(void) {
+	ADMUX |= (1 << REFS0); // Voltage de referencia capacitor externo Avcc 1uf table 24.3 248
+	ADMUX |= ((1<<MUX0) | (1<<MUX2)); // ADC 5 seleccionado  pin 28  table ref 24.4 pag 249
+	ADMUX |= (1<<MUX2); //ADC 4
+	ADMUX |= (1<<MUX0) | (1<<MUX1);//ADC 3
+	ADMUX |= (1<<MUX1);//ADC 2
+	ADMUX |= (1<<MUX0);//ADC 1
+	ADMUX &= ~((1<<MUX3) | (1<<MUX2) | (1<<MUX1) | (1<<MUX0) ); //ADC 0 SIEMPRE ACTIVO
+	
+	ADCSRA |= (1 << ADPS1) | (1 << ADPS0); // ADC clock prescaler /8 ref 25-5 pag 250
+	ADCSRA |= (1 << ADEN); // Enable ADC Ref 24.9.2
+}
+
+int main(void) {
+	
+	//DDRB =  0b00111111
+	
+	uint16_t ledValue;
+	uint16_t adcValue;
+	
+	int i = 0;
+	
+	initADC0(); // Llamando el seteo de la funcion ADC0 que esta en adc.h
+	USART0Init();
+	//Initialize LCD module
+	LCDInit(LS_NONE);
+
+	//Clear the screen
+	LCDClear();
+	
+	PORTC |= (1 << PINC5);	// Se cierra la resistencia el transistor de salida se conecta
+	PORTC |= (1 << PINC4);
+	PORTC |= (1 << PINC3);
+	PORTC |= (1 << PINC2);
+	PORTC |= (1 << PINC1);
+	PORTC |= (1 << PINC0);
+	
+	while (1) {
+		ADCSRA |= (1 << ADSC); /* start ADC conversion */
+		while ((ADCSRA & (1 << ADSC)) == 1)
+		{
+			PORTB |= (1 << PINB3);					   //loop_until_bit_is_clear(ADCSRA, ADSC); /* wait until done */
+		}  //(bit_is_clear(ADCSRA, ADSC));	//((
+		
+		
+		adcValue = ADC; /* read ADC in */	/* Have 10 bits, want 3 (eight LEDs after all) */
+		uint8_t theLowADC = ADCL; //value ADC low
+		uint8_t theHighADC = ADCH; //value ADC low
+		
+		
+		ledValue = ((adcValue >> 0)+1023);	
+		//ledValue = (theHighADC >> 0);		   /* Light up all LEDs up to ledValue */
+		//ledValue = (theLowADC  >> 0);	
+		
+		//USART0SendByte('4');
+		switch (i)
+		{
+			
+			case 0: //ADC5
+			ADMUX &= ~((1<<MUX3) | (1<<MUX2) | (1<<MUX1) | (1<<MUX0) );
+			USART0SendByte('!'); //33
+			ADMUX |= ((1<<MUX0) | (1<<MUX2));
+			LCDWriteIntXY(0,0,ADC,4);
+		
+			USART0SendByte((theHighADC) * 85 );
+			USART0SendByte(theLowADC);			
+			i = 1;
+			break;
+			
+			case 1://ADC4
+			ADMUX &= ~((1<<MUX3) | (1<<MUX2) | (1<<MUX1) | (1<<MUX0) );
+			USART0SendByte('4'); //52
+			ADMUX |= (1<<MUX2);
+			LCDWriteIntXY(5,0,ADC,4);
+			USART0SendByte((theHighADC) * 85 );
+			USART0SendByte(theLowADC);
+			i = 2;
+			break;
+			//
+			case 2://ADC3
+			ADMUX &= ~((1<<MUX3) | (1<<MUX2) | (1<<MUX1) | (1<<MUX0) );
+			USART0SendByte('>'); //62
+			ADMUX |= ((1<<MUX1) | (1<<MUX0));
+			LCDWriteIntXY(10,0,ADC,4);
+			USART0SendByte((theHighADC) * 85 );
+			USART0SendByte(theLowADC);
+			i = 3;
+			break;
+			
+			case 3://ADC2
+			ADMUX &= ~((1<<MUX3) | (1<<MUX2) | (1<<MUX1) | (1<<MUX0) );
+			USART0SendByte('H'); //72
+			ADMUX |= (1<<MUX1);
+			LCDWriteIntXY(0,1,ADC,4);
+			USART0SendByte((theHighADC) * 85 );
+			USART0SendByte(theLowADC);
+			i = 4;
+			break;
+			
+			case 4://ADC1
+			ADMUX &= ~((1<<MUX3) | (1<<MUX2) | (1<<MUX1) | (1<<MUX0) );
+			USART0SendByte('R');//82
+			LCDWriteIntXY(5,1, ADC,4);
+			ADMUX |= (1<<MUX0);
+			USART0SendByte((theHighADC) * 85 );
+			USART0SendByte(theLowADC);
+			i = 5;
+			break;
+			
+			case 5://ADC0
+			ADMUX &= ~((1<<MUX3) | (1<<MUX2) | (1<<MUX1) | (1<<MUX0) );
+			LCDWriteIntXY(10,1, ADC,4);
+			USART0SendByte(']'); //93
+			USART0SendByte((theHighADC) * 85 );
+			USART0SendByte(theLowADC);
+			i = 0;
+			break;
+		}
+		
+		_delay_ms(10);
+		} 
+		return (0); 
+	}
